@@ -6,7 +6,6 @@ require('dotenv').config();
 // Imports
 const express = require("express");
 const session = require("express-session");
-const ExpressOIDC = require("@okta/oidc-middleware").ExpressOIDC;
 const { auth } = require('express-openid-connect');
 const { requiresAuth } = require('express-openid-connect');
 var cons = require('consolidate');
@@ -22,24 +21,25 @@ const PORT = process.env.PORT || "3000";
 const SECRET = process.env.SECRET;
 const BASE_URL = process.env.BASE_URL;
 
-//  Esto se los dará Okta.
+//  Esto se los dará Auth0/Okta.
 const config = {
   authRequired: false,
   auth0Logout: true,
   secret: SECRET,
   baseURL: BASE_URL,
   clientID: OKTA_CLIENT_ID,
-  issuerBaseURL: OKTA_ISSUER_URI
+  issuerBaseURL: OKTA_ISSUER_URI,
+  routes: {
+    login: '/login',
+    logout: '/logout',
+    callback: '/callback',
+    postLogoutRedirect: '/'
+  },
+  afterCallback: (req, res, session) => {
+    // Redirigir al dashboard después del login exitoso
+    return res.redirect('/dashboard');
+  }
 };
-
-let oidc = new ExpressOIDC({
-  issuer: OKTA_ISSUER_URI,
-  client_id: OKTA_CLIENT_ID,
-  client_secret: OKTA_CLIENT_SECRET,
-  redirect_uri: REDIRECT_URI,
-  routes: { callback: { defaultRedirect: REDIRECT_URI } },
-  scope: 'openid profile'
-});
 
 // auth router attaches /login, /logout, and /callback routes to the baseURL
 app.use(auth(config));
@@ -59,29 +59,22 @@ app.use(session({
 }));
 
 // App routes
-app.use(oidc.router);
-
 app.get("/",  (req, res) => {
+  if (req.oidc.isAuthenticated()) {
+    // Si ya está autenticado, redirigir al dashboard
+    return res.redirect('/dashboard');
+  }
   res.render("index");  
 });
 
 app.get("/dashboard", requiresAuth() ,(req, res) => {  
-  // if(req.oidc.isAuthenticated())
-  // {
-    var payload = Buffer.from(req.appSession.id_token.split('.')[1], 'base64').toString('utf-8');
-    const userInfo = JSON.parse(payload);
-    res.render("dashboard", { user: userInfo });
-  //}
+  // Obtener información del usuario desde req.oidc.user
+  const userInfo = req.oidc.user;
+  res.render("dashboard", { user: userInfo });
 });
 
 const openIdClient = require('openid-client');
 openIdClient.Issuer.defaultHttpOptions.timeout = 20000;
 
-oidc.on("ready", () => {
-  console.log("Server running on port: " + PORT);
-  app.listen(parseInt(PORT));
-});
-
-oidc.on("error", err => {
-  console.error(err);
-});
+console.log("Server running on port: " + PORT);
+app.listen(parseInt(PORT));
