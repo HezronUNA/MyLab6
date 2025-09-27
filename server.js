@@ -1,27 +1,25 @@
 "use strict";
 
-// Cargar variables de entorno
 require('dotenv').config();
 
-// Imports
 const express = require("express");
-const session = require("express-session");
-const { auth } = require('express-openid-connect');
-const { requiresAuth } = require('express-openid-connect');
-var cons = require('consolidate');
-var path = require('path');
-let app = express();
+const { auth, requiresAuth } = require('express-openid-connect');
+const cons = require('consolidate');
+const path = require('path');
+
+const app = express();
 
 // Globals
-const OKTA_ISSUER_URI = process.env.OKTA_ISSUER_URI;
-const OKTA_CLIENT_ID = process.env.OKTA_CLIENT_ID;
-const OKTA_CLIENT_SECRET = process.env.OKTA_CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI;
-const PORT = process.env.PORT || "3000";
-const SECRET = process.env.SECRET;
-const BASE_URL = process.env.BASE_URL;
+const {
+  OKTA_ISSUER_URI,
+  OKTA_CLIENT_ID,
+  OKTA_CLIENT_SECRET, // (no se usa aquí, pero lo dejé)
+  REDIRECT_URI,       // (no se usa aquí, pero lo dejé)
+  PORT = "3000",
+  SECRET,
+  BASE_URL
+} = process.env;
 
-//  Esto se los dará Auth0/Okta.
 const config = {
   authRequired: false,
   auth0Logout: true,
@@ -35,44 +33,43 @@ const config = {
     callback: '/callback',
     postLogoutRedirect: '/'
   },
+  // ⚠️ Importante: NO responder aquí. Solo devolver session.
   afterCallback: (req, res, session) => {
-    // Redirigir al dashboard después del login exitoso
-    return res.redirect('/dashboard');
+    // podés anexar cosas a session si querés
+    return session;
   }
 };
 
-// auth router attaches /login, /logout, and /callback routes to the baseURL
+// Attach OIDC routes
 app.use(auth(config));
 
 // MVC View Setup
-app.engine('html', cons.swig)
+app.engine('html', cons.swig);
 app.set('views', path.join(__dirname, 'views'));
 app.set('models', path.join(__dirname, 'models'));
 app.set('view engine', 'html');
 
-// App middleware
+// Static
 app.use("/static", express.static("static"));
 
-app.use(session({
-  cookie: { httpOnly: true },
-  secret: SECRET
-}));
+// ✅ Ruta de login que ya pide volver a /dashboard al finalizar
+app.get('/login', (req, res) => {
+  return res.oidc.login({ returnTo: '/dashboard' });
+});
 
-// App routes
-app.get("/",  (req, res) => {
+app.get("/", (req, res) => {
   if (req.oidc.isAuthenticated()) {
-    // Si ya está autenticado, redirigir al dashboard
-    return res.redirect('/dashboard');
+    return res.redirect('/dashboard'); // ✅ usar return después de redirect
   }
-  res.render("index");  
+  return res.render("index");
 });
 
-app.get("/dashboard", requiresAuth() ,(req, res) => {  
-  // Obtener información del usuario desde req.oidc.user
+app.get("/dashboard", requiresAuth(), (req, res) => {
   const userInfo = req.oidc.user;
-  res.render("dashboard", { user: userInfo });
+  return res.render("dashboard", { user: userInfo });
 });
 
+// Opcional: aumentar timeout del openid-client
 const openIdClient = require('openid-client');
 openIdClient.Issuer.defaultHttpOptions.timeout = 20000;
 
