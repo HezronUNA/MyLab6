@@ -9,7 +9,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
     "express-openid-connect": "^2.18.0",
-    "express-session": "^1.18.1",
+    "express-session": "^1.18.2",
     "socket.io": "^2.4.0",
     "swig": "^1.4.2"
   },
